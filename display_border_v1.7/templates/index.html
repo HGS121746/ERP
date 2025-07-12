@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ title }}</title>
+
+    <link rel="stylesheet" href="/static/css/index.css">
+</head>
+<body>
+    <!-- 看板类型选择器 -->
+    <div class="board-type-selector" id="boardTypeSelector">
+        <!-- 按钮将通过JavaScript动态生成 -->
+    </div>
+    
+    <!-- 页眉部分 -->
+    <div class="board-header">
+        <div class="board-header-bg">
+            <div class="board-header-bg-content">
+                <div class="center-wrapper">
+                    <span class="proline-name">{{ proline_name }}</span>
+                    <!-- <span class="production-type">{{ production_type }}</span> -->
+                </div>
+            </div>
+        </div>
+        
+        <div class="board-header-left">
+            <img src="/static/img/logo-CHIOSHINE.png" alt="">
+            <span class="company-name">{{ company_name }}</span>
+        </div>
+        
+        <div class="board-header-right">
+            <span class="date">{{ current_time.time_frame }}好 {{ current_time.date }} {{ current_time.time }} {{ current_time.weekday }}</span>
+        </div>
+    </div>
+    
+    <!-- 表格容器 -->
+    <div class="table-container">
+        <table>
+            <thead id="tableHeader">
+                <!-- 表头将通过JavaScript动态生成 -->
+            </thead>
+            <tbody id="tableBody">
+                <!-- 数据将通过JavaScript动态填充 -->
+            </tbody>
+        </table>
+    </div>
+    
+    <script>
+        // 看板类型定义 - 使用更兼容的语法
+        var BOARD_TYPES = {
+            dieBonding: "固晶",
+            priming: "底涂",
+            taping: "贴膜",
+            printing: "印刷",
+            rework: "返修",
+            smt: "SMT",
+            shrinkage: "涨缩"
+        };
+        
+        // 当前看板类型
+        var currentBoardType = "{{ board_type }}";
+        var isShiftWork = {{ is_shift_work|tojson }};
+        var kanban = '{{ proline_name }}';
+        var cachedData = null; // 用于缓存上次成功加载的数据
+        
+        // 初始化页面
+        document.addEventListener('DOMContentLoaded', function() {
+            initBoardTypeSelector();
+            updateCurrentTime();
+            updateTableData(); // 启动数据更新链
+            
+            // 每秒更新一次时间
+            setInterval(updateCurrentTime, 10000);
+        });
+        
+        // 初始化看板类型选择器 - 兼容旧浏览器
+        function initBoardTypeSelector() {
+            var selector = document.getElementById('boardTypeSelector');
+            var types = Object.keys(BOARD_TYPES);
+            
+            for (var i = 0; i < types.length; i++) {
+                var type = types[i];
+                var btn = document.createElement('button');
+                btn.className = 'board-type-btn' + (type === currentBoardType ? ' active' : '');
+                btn.textContent = BOARD_TYPES[type];
+                btn.onclick = (function(type) {
+                    return function() {
+                        switchBoardType(type);
+                    };
+                })(type);
+                selector.appendChild(btn);
+            }
+        }
+        
+        // 切换看板类型
+        function switchBoardType(type) {
+            if (type === currentBoardType) return;
+            
+            currentBoardType = type;
+            
+            var buttons = document.querySelectorAll('.board-type-btn');
+            for (var i = 0; i < buttons.length; i++) {
+                buttons[i].classList.remove('active');
+                if (buttons[i].textContent === BOARD_TYPES[type]) {
+                    buttons[i].classList.add('active');
+                }
+            }
+            
+            document.title = BOARD_TYPES[type] + " — {{ company_name }}";
+            document.querySelector('.proline-name').textContent = 
+                BOARD_TYPES[type] + '{{ "-" + line_serial if line_serial else "" }}{{ direction }}';
+            
+            updateTableData();
+        }
+        
+        // 更新当前时间 - 使用XMLHttpRequest替代fetch
+        function updateCurrentTime() {
+            var xhr = new XMLHttpRequest();
+            xhr.open('GET', '/current_time', true);
+            xhr.onreadystatechange = function() {
+                if (xhr.readyState === 4 && xhr.status === 200) {
+                    try {
+                        var data = JSON.parse(xhr.responseText);
+                        document.querySelector('.date').textContent = 
+                            data.time_frame + '好 ' + data.date + ' ' + data.time + ' ' + data.weekday;
+                    } catch (e) {
+                        console.error('解析时间数据失败:', e);
+                    }
+                }
+            };
+            xhr.send();
+        }
+        
+        // 更新表格数据（使用链式轮询）- 使用XMLHttpRequest替代fetch
+        function updateTableData() {
+            // var params = 'boardType=' + encodeURIComponent(currentBoardType) + 
+            //              '&isShiftWork=' + encodeURIComponent(isShiftWork) + '&boardName=' + encodeURIComponent(kanban);
+            var params = 'boardType=' + encodeURIComponent(currentBoardType) + '&boardName=' + encodeURIComponent(kanban);
+            var xhr = new XMLHttpRequest();
+            xhr.open('GET', '/api/board-data?' + params, true);
+            xhr.onreadystatechange = function() {
+                if (xhr.readyState === 4) {
+                    if (xhr.status === 200) {
+                        try {
+                            var data = JSON.parse(xhr.responseText);
+                            cachedData = data; // 缓存成功获取的数据
+                            renderTable(data);
+                        } catch (e) {
+                            console.error('解析数据失败:', e);
+                            if (cachedData) renderTable(cachedData);
+                        }
+                    } else {
+                        console.error('获取数据失败:', xhr.status);
+                        if (cachedData) renderTable(cachedData);
+                    }
+                    
+                    // 无论成功或失败，10秒后再次更新
+                    setTimeout(updateTableData, 30000);
+                }
+            };
+            xhr.send();
+        }
+        
+        // 渲染表格 - 添加更兼容的处理
+        function renderTable(data) {
+            var thead = document.getElementById('tableHeader');
+            var tbody = document.getElementById('tableBody');
+            
+            thead.innerHTML = '';
+            tbody.innerHTML = '';
+            var columns = getColumns(currentBoardType);
+            if (currentBoardType == "dieBonding"){
+                tbody.className = "dieBonding_td"
+            }
+            
+            var columns = getColumns(currentBoardType);
+            
+            var headerRow = document.createElement('tr');
+            for (var i = 0; i < columns.length; i++) {
+                var col = columns[i];
+                var th = document.createElement('th');
+                th.textContent = col.label;
+                headerRow.appendChild(th);
+            }
+            thead.appendChild(headerRow);
+            
+            if (!data || data.length === 0) {
+                var row = document.createElement('tr');
+                var cell = document.createElement('td');
+                cell.colSpan = columns.length;
+                cell.textContent = '暂无数据';
+                cell.style.textAlign = 'center';
+                cell.style.padding = '20px';
+                row.appendChild(cell);
+                tbody.appendChild(row);
+                return;
+            }
+            
+            for (var j = 0; j < data.length; j++) {
+                var item = data[j];
+                var row = document.createElement('tr');
+                
+                for (var k = 0; k < columns.length; k++) {
+                    var col = columns[k];
+                    var cell = document.createElement('td');
+                    var value = item[col.prop];
+                    
+                    if (col.formatter) {
+                        if (col.formatter === 'time') {
+                            value = formatTime(value);
+                        } else if (col.formatter === 'array') {
+                            if (Array.isArray(value)) {
+                                var container = document.createElement('div');
+                                container.className = 'multi-line';
+                                
+                                for (var m = 0; m < value.length; m++) {
+                                    var div = document.createElement('div');
+                                    div.textContent = value[m];
+                                    container.appendChild(div);
+                                }
+                                
+                                cell.appendChild(container);
+                                cell.classList.add('multi-line-cell');
+                                row.appendChild(cell);
+                                continue;
+                            } else {
+                                value = '--';
+                            }
+                        }
+                    }
+                    
+                    if (col.prop === 'devId') {
+                        var statusClass = item.alarmCount === 0 ? 'status-normal' : 
+                                          item.alarmCount < 3 ? 'status-warning' : 'status-error';
+                        var indicator = document.createElement('span');
+                        indicator.className = 'status-indicator ' + statusClass;
+                        cell.appendChild(indicator);
+                        var text = document.createTextNode(value || '--');
+                        cell.appendChild(text);
+                    } else {
+                        cell.textContent = value || '--';
+                    }
+                    
+                    row.appendChild(cell);
+                }
+                
+                tbody.appendChild(row);
+            }
+        }
+        
+        // 获取当前看板类型的列配置
+        function getColumns(boardType) {
+            var columnConfigs = {
+                dieBonding: [
+                    { label: "PCB编码", prop: "pcbId" },
+                    { label: "机台号", prop: "devId" },
+                    { label: "要板时间", prop: "askPcbTime", formatter: "time" },
+                    { label: "到达时间", prop: "pcbArriveTime", formatter: "time" },
+                    { label: "出板时间", prop: "pcbOutTime", formatter: "time" },
+                    { label: "用户名", prop: "userName" },
+                    { label: "固晶开始时间", prop: "startTime", formatter: "time" },
+                    { label: "固晶结束时间", prop: "finishTime", formatter: "time" },
+                    { label: "固晶速度", prop: "speedAverage" },
+                    { label: "已固数", prop: "bondOk" },
+                    { label: "漏固数", prop: "missBond" },
+                    { label: "漏取数", prop: "missTake" },
+                    { label: "报警次数", prop: "alarmCount" },
+                    { label: "异常处理时间", prop: "brokeTime" },
+                    { label: "开机空闲时间", prop: "freeTime" },
+                    { label: "完成率", prop: "cRate" },
+                ],
+                priming: [
+                    { label: "时段", prop: "timeFrame" },
+                    { label: "数量", prop: "quantity" },
+                    { label: "不良数", prop: "defectQuantity" },
+                    { label: "不良率", prop: "defectRate" },
+                    { label: "生产人数", prop: "peopleNum" },
+                ],
+                taping: [
+                    { label: "时段", prop: "timeFrame" },
+                    { label: "数量", prop: "quantity" },
+                    { label: "不良数", prop: "defectQuantity" },
+                    { label: "不良率", prop: "defectRate" },
+                    { label: "生产人数", prop: "peopleNum" },
+                ],
+                printing: [
+                    { label: "时段", prop: "timeFrame" },
+                    { label: "数量", prop: "quantity" },
+                    { label: "不良数", prop: "defectQuantity" },
+                    { label: "不良率", prop: "defectRate" },
+                    { label: "生产人数", prop: "peopleNum" },
+                ],
+                rework: [
+                    { label: "时段", prop: "timeFrame" },
+                    { label: "点亮外观数量", prop: "illumeQuantity" },
+                    { label: "直通率", prop: "firstPassRate" },
+                    { label: "返修数量", prop: "reworkQuantity" },
+                    { label: "一次通过率", prop: "onetimePassRate" },
+                    { label: "不良率", prop: "defectRate" },
+                ],
+                smt: [
+                    { label: "时段", prop: "timeFrame" },
+                    { label: "数量", prop: "quantity" },
+                    { label: "不良数", prop: "defectQuantity" },
+                    { label: "不良率", prop: "defectRate" },
+                    { label: "生产人数", prop: "peopleNum" },
+                ],
+                shrinkage: [
+                    { label: "时段", prop: "timeFrame" },
+                    { label: "规格", prop: "size", formatter: "array" },
+                    { label: "数量", prop: "quantity", formatter: "array" },
+                    { label: "不良数", prop: "defectQuantity" },
+                    { label: "不良率", prop: "defectRate" },
+                    { label: "生产人数", prop: "peopleNum" },
+                ]
+            };
+            
+            return columnConfigs[boardType] || columnConfigs.dieBonding;
+        }
+        
+        // 格式化时间 - 更兼容的写法
+        function formatTime(timeString) {
+            if (!timeString) return '--';
+            
+            try {
+                var time = new Date(timeString);
+                if (isNaN(time.getTime())) return timeString;
+                
+                var hours = time.getHours();
+                var minutes = time.getMinutes();
+                var seconds = time.getSeconds();
+                
+                // 手动补零
+                hours = hours < 10 ? '0' + hours : hours;
+                minutes = minutes < 10 ? '0' + minutes : minutes;
+                seconds = seconds < 10 ? '0' + seconds : seconds;
+                
+                return hours + ':' + minutes + ':' + seconds;
+            } catch (e) {
+                return timeString;
+            }
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>图片轮播</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            width: 100vw;
+            height: 100vh;
+            overflow: hidden;
+            background-color: #000;
+        }
+        
+        .carousel-container {
+            width: 100%;
+            height: 100%;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .carousel-image {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            position: absolute;
+            top: 0;
+            left: 0;
+            transition: opacity 1s ease;
+        }
+        
+        /* 竖屏特定样式 */
+        @media screen and (orientation: portrait) {
+            .carousel-container {
+                max-width: 1080px;
+                max-height: 1920px;
+                margin: 0 auto;
+            }
+        }
+        
+        /* 横屏适配（可选） */
+        @media screen and (orientation: landscape) {
+            .carousel-container {
+                max-width: 1920px;
+                max-height: 1080px;
+                margin: 0 auto;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="board-type-selector" id="boardTypeSelector">
+    </div>
+    <div class="carousel-container">
+        {% for image in images %}
+            <img id="img{{ loop.index }}" 
+                 class="carousel-image" 
+                 src="{{ image }}"
+                 style="opacity: {{ 1 if loop.first else 0 }}"
+                 alt="轮播图片{{ loop.index }}">
+        {% endfor %}
+    </div>
+
+    <script>
+        // 根据时间自动切换图片
+        function updateCarousel() {
+            const now = new Date();
+            const seconds = now.getSeconds();
+            let activeIndex = 0;
+            
+            // 根据秒数确定当前图片索引
+            if (seconds >= 0 && seconds < 20) activeIndex = 0;
+            else if (seconds >= 20 && seconds < 40) activeIndex = 1;
+            else activeIndex = 2;
+            
+            // 更新图片显示
+            document.querySelectorAll('.carousel-image').forEach((img, index) => {
+                img.style.opacity = index === activeIndex ? 1 : 0;
+            });
+        }
+        
+        // 预加载图片
+        function preloadImages() {
+            {% for image in images %}
+                new Image().src = "{{ image }}";
+            {% endfor %}
+        }
+        
+        // 处理屏幕旋转
+        function handleOrientationChange() {
+            const container = document.querySelector('.carousel-container');
+            if (window.orientation === 90 || window.orientation === -90) {
+                // 横屏
+                container.style.maxWidth = '1920px';
+                container.style.maxHeight = '1080px';
+            } else {
+                // 竖屏
+                container.style.maxWidth = '1080px';
+                container.style.maxHeight = '1920px';
+            }
+        }
+        
+        // 初始化
+        window.onload = function() {
+            preloadImages();
+            updateCarousel();
+            setInterval(updateCarousel, 1000); // 每秒更新一次
+            
+            // 监听屏幕旋转
+            window.addEventListener('orientationchange', handleOrientationChange);
+            window.addEventListener('resize', handleOrientationChange);
+        };
+    </script>
+</body>
+</html>

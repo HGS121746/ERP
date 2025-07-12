@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ title }}</title>
+    <link rel="stylesheet" href="/static/css/index.css">
+    <style>
+        th, td {
+            padding: 27px 8px; /* 减少垂直内边距 */
+            text-align: center;
+            border: 1px solid rgba(119, 104, 122, 0.3);
+            font-size: 20px; /* 增大字体 */
+            font-weight: bold; /* 加粗字体 */
+        }
+        
+    </style>
+</head>
+<body>
+    <!-- 看板类型选择器 -->
+    <div class="board-type-selector" id="boardTypeSelector">
+        <!-- 按钮将通过JavaScript动态生成 -->
+    </div>
+    <!-- 班次指示器 -->
+    <div class="shift-indicator" id="shiftIndicator" style="display: none;"></div>
+    
+    <!-- 页眉部分 -->
+    <div class="board-header">
+        <div class="board-header-bg">
+            <div class="board-header-bg-content">
+                <div class="center-wrapper">
+                    <span class="proline-name">{{ proline_name }}</span>
+                </div>
+            </div>
+        </div>
+        
+        <div class="board-header-left">
+            <img src="/static/img/logo-CHIOSHINE.png" alt="">
+            <span class="company-name">{{ company_name }}</span>
+        </div>
+        
+        <div class="board-header-right">
+            <span class="date">{{ current_time.time_frame }}好 {{ current_time.date }} {{ current_time.time }} {{ current_time.weekday }}</span>
+        </div>
+    </div>
+    
+    <!-- 表格容器 -->
+    <div class="table-container">
+        <table>
+            <thead id="tableHeader">
+                <!-- 表头将通过JavaScript动态生成 -->
+            </thead>
+            <tbody id="tableBody">
+                <!-- 数据将通过JavaScript动态填充 -->
+            </tbody>
+        </table>
+    </div>
+    
+    <script>
+        // 当前看板类型
+        var currentBoardType = "shrinkage";
+        var isShiftWork = {{ is_shift_work|tojson }};
+        var cachedData = null;
+        var currentShift = ""; // 当前班次：day(白班) 或 night(夜班)
+        
+        // 初始化页面
+        document.addEventListener('DOMContentLoaded', function() {
+            updateCurrentTime();
+            updateTableData(); // 启动数据更新链
+            
+            // 每秒更新一次时间
+            setInterval(updateCurrentTime, 10000);
+        });
+        
+        // 更新当前时间
+        function updateCurrentTime() {
+            var xhr = new XMLHttpRequest();
+            xhr.open('GET', '/current_time', true);
+            xhr.onreadystatechange = function() {
+                if (xhr.readyState === 4 && xhr.status === 200) {
+                    try {
+                        var data = JSON.parse(xhr.responseText);
+                        document.querySelector('.date').textContent = 
+                            data.time_frame + '好 ' + data.date + ' ' + data.time + ' ' + data.weekday;
+                    } catch (e) {
+                        console.error('解析时间数据失败:', e);
+                    }
+                }
+            };
+            xhr.send();
+        }
+        
+        // 更新表格数据
+        function updateTableData() {
+            var params = 'boardType=' + encodeURIComponent(currentBoardType)
+
+            var xhr = new XMLHttpRequest();
+            xhr.open('GET', '/api/board-data?' + params, true);
+            xhr.onreadystatechange = function() {
+                if (xhr.readyState === 4) {
+                    if (xhr.status === 200) {
+                        try {
+                            var data = JSON.parse(xhr.responseText);
+                            cachedData = data;
+                            renderTable(data);
+                        } catch (e) {
+                            console.error('解析数据失败:', e);
+                            if (cachedData) renderTable(cachedData);
+                        }
+                    } else {
+                        console.error('获取数据失败:', xhr.status);
+                        if (cachedData) renderTable(cachedData);
+                    }
+                    
+                    // 30秒后再次更新
+                    setTimeout(updateTableData, 30000);
+                }
+            };
+            xhr.send();
+        }
+        
+        // 判断当前班次
+        function getCurrentShift() {
+            var now = new Date();
+            var hours = now.getHours();
+            
+            // 白班：上午8点(8:00)到晚上8点(20:00)
+            if (hours >= 8 && hours < 20) {
+                return "day";
+            }
+            // 夜班：晚上8点(20:00)到次日早上8点(8:00)
+            return "night";
+        }
+        
+        // 根据班次筛选数据
+        function filterDataByShift(data) {
+            // 获取当前班次
+            currentShift = getCurrentShift();
+            
+            // 更新班次指示器
+            var indicator = document.getElementById('shiftIndicator');
+            if (currentShift === "day") {
+                indicator.textContent = "白班数据";
+                indicator.style.backgroundColor = "#3498db"; // 蓝色背景
+            } else {
+                indicator.textContent = "夜班数据";
+                indicator.style.backgroundColor = "#2c3e50"; // 深蓝色背景
+            }
+            
+            // 如果没有数据，直接返回空数组
+            if (!data || data.length === 0) return [];
+            
+            // 筛选对应班次的数据
+            if (currentShift === "day") {
+                // 白班数据：前6个时间段（08:00-20:00）
+                return data.slice(0, 6);
+            } else {
+                // 夜班数据：后6个时间段（20:00-08:00）
+                return data.slice(6, 12);
+            }
+        }
+        
+        // 涨缩线特有的表格渲染逻辑
+        function renderTable(data) {
+            var thead = document.getElementById('tableHeader');
+            var tbody = document.getElementById('tableBody');
+            
+            thead.innerHTML = '';
+            tbody.innerHTML = '';
+            
+            // 涨缩线专用列配置
+            var columns = [
+                { label: "时段", prop: "timeFrame" },
+                { label: "规格", prop: "size", formatter: "array" },
+                { label: "数量", prop: "quantity", formatter: "array" },
+                { label: "不良数", prop: "defectQuantity" },
+                { label: "不良率", prop: "defectRate" },
+                { label: "生产人数", prop: "peopleNum" }
+            ];
+            
+            // 创建表头
+            var headerRow = document.createElement('tr');
+            headerRow.className = 'shrinkage-header';
+            for (var i = 0; i < columns.length; i++) {
+                var col = columns[i];
+                var th = document.createElement('th');
+                th.textContent = col.label;
+                headerRow.appendChild(th);
+            }
+            thead.appendChild(headerRow);
+            
+            // 根据当前时间筛选班次数据
+            var displayData = filterDataByShift(data);
+            
+            // 处理无数据情况
+            if (displayData.length === 0) {
+                var row = document.createElement('tr');
+                var cell = document.createElement('td');
+                cell.colSpan = columns.length;
+                cell.textContent = '暂无数据';
+                cell.style.textAlign = 'center';
+                cell.style.padding = '30px';
+                cell.style.fontSize = '24px';
+                row.appendChild(cell);
+                tbody.appendChild(row);
+                return;
+            }
+            
+            // 创建数据行
+            for (var j = 0; j < displayData.length; j++) {
+                var item = displayData[j];
+                var row = document.createElement('tr');
+                
+                for (var k = 0; k < columns.length; k++) {
+                    var col = columns[k];
+                    var cell = document.createElement('td');
+                    cell.className = 'shrinkage-cell';
+                    
+                    var value = item[col.prop];
+                    
+                    // 处理数组类型数据（规格和数量）
+                    if (col.formatter === 'array' && Array.isArray(value)) {
+                        for (var m = 0; m < value.length; m++) {
+                            var valueDiv = document.createElement('div');
+                            valueDiv.className = 'shrinkage-value';
+                            valueDiv.textContent = value[m];
+                            cell.appendChild(valueDiv);
+                        }
+                    } else {
+                        var valueDiv = document.createElement('div');
+                        valueDiv.className = 'shrinkage-value';
+                        valueDiv.textContent = value || '--';
+                        cell.appendChild(valueDiv);
+                    }
+                    
+                    row.appendChild(cell);
+                }
+                
+                tbody.appendChild(row);
+            }
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>全屏沉浸式图片轮播</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            background: #000;
+            height: 100vh;
+            overflow: hidden;
+            font-family: 'Microsoft YaHei', sans-serif;
+        }
+        
+        .container {
+            width: 100%;
+            height: 100%;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        #loadingIndicator {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.9);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 100;
+            transition: opacity 0.5s;
+        }
+        
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 5px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top-color: #fff;
+            animation: spin 1s ease-in-out infinite;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        /* 竖屏轮播容器 */
+        .vertical-slider-container {
+            width: 100%;
+            height: 100%;
+            position: relative;
+        }
+        
+        .vertical-slider {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            position: absolute;
+            top: 0;
+            left: 0;
+            transition: opacity 1s ease;
+        }
+        
+        .vertical-slider:not(.active) {
+            opacity: 0;
+            pointer-events: none;
+            z-index: 1;
+        }
+        
+        .vertical-slider.active {
+            opacity: 1;
+            pointer-events: auto;
+            z-index: 2;
+        }
+        
+        /* 轮播图列表 */
+        .slider-list {
+            display: flex;
+            flex-direction: column;
+            transition: transform 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+            height: 100%;
+        }
+        
+        /* 轮播项 */
+        .slider-item {
+            width: 100%;
+            height: 100%;
+            flex-shrink: 0;
+            position: relative;
+        }
+        
+        .slider-item img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            transition: transform 0.8s ease;
+        }
+        
+        /* 指示器 */
+        .slider-indicators {
+            position: absolute;
+            right: 20px;
+            top: 50%;
+            transform: translateY(-50%);
+            display: none;
+            flex-direction: column;
+            gap: 15px;
+            z-index: 10;
+        }
+        
+        .indicator {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background-color: rgba(255, 255, 255, 0.3);
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .indicator.active {
+            background-color: #fff;
+            transform: scale(1.5);
+            box-shadow: 0 0 6px rgba(255, 255, 255, 0.7);
+        }
+        
+        /* 组切换进度条 */
+        .group-progress {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 180px;
+            height: 2px;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 1px;
+            z-index: 10;
+            overflow: hidden;
+        }
+        
+        .progress-bar {
+            height: 100%;
+            width: 0%;
+            background: #fff;
+            transition: width 0.5s linear;
+        }
+    </style>
+</head>
+<body>
+    <div class="board-type-selector" id="boardTypeSelector">
+    </div>
+    <div id="loadingIndicator">
+        <div class="spinner"></div>
+    </div>
+    
+    <div class="container" style="opacity: 0;">
+        <div class="vertical-slider-container">
+            <!-- 产品轮播 -->
+            <div class="vertical-slider active" id="productSlider">
+                <div class="slider-list" id="productSliderList"></div>
+                <div class="slider-indicators" id="productIndicators"></div>
+            </div>
+            
+            <!-- 质量轮播 -->
+            <div class="vertical-slider" id="qualitySlider">
+                <div class="slider-list" id="qualitySliderList"></div>
+                <div class="slider-indicators" id="qualityIndicators"></div>
+            </div>
+            
+            <!-- s6轮播 -->
+            <div class="vertical-slider" id="s6Slider">
+                <div class="slider-list" id="s6SliderList"></div>
+                <div class="slider-indicators" id="s6Indicators"></div>
+            </div>
+        </div>
+        
+        <!-- 组切换进度条 -->
+        <div class="group-progress">
+            <div class="progress-bar" id="progressBar"></div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // 图片数据（使用高质量视觉素材）
+             const productData = [
+                {img: 'static/img/product/img1.png', desc: '产品展示1'},
+                {img: 'static/img/product/img2.png', desc: '产品展示2'},
+                {img: 'static/img/product/img3.png', desc: '产品展示3'},
+                {img: 'static/img/product/img4.png', desc: '产品展示4'},
+                {img: 'static/img/product/img5.png', desc: '产品展示5'}
+            ];
+
+            const qualityData = [
+                {img: 'static/img/quality/img1.png', desc: '品质工艺1'},
+                {img: 'static/img/quality/img2.png', desc: '品质工艺2'},
+                {img: 'static/img/quality/img3.png', desc: '品质工艺3'},
+                {img: 'static/img/quality/img4.png', desc: '品质工艺4'},
+                {img: 'static/img/quality/img5.png', desc: '品质工艺5'}
+            ];
+
+            const s6Data = [
+                {img: 'static/img/6s/1.jpg', desc: '热销系列1'},
+                {img: 'static/img/6s/2.jpg', desc: '热销系列2'},
+                {img: 'static/img/6s/3.jpg', desc: '热销系列3'},
+                {img: 'static/img/6s/4.jpg', desc: '热销系列4'},
+                {img: 'static/img/6s/5.jpg', desc: '热销系列5'},
+                {img: 'static/img/6s/6.jpg', desc: '热销系列5'}
+            ];
+            
+            // 所有图片数据
+            const allImages = [...productData, ...qualityData, ...s6Data];
+            const imageCount = allImages.length;
+            let loadedImages = 0;
+            let cachedImages = [];
+            
+            // 清除现有的图片缓存
+            function clearImageCache() {
+                console.log("清空图片缓存");
+                // 添加时间戳参数清除缓存
+                allImages.forEach(item => {
+                    item.img = `${item.img}?t=${new Date().getTime()}`;
+                });
+                
+                // 清除本地缓存
+                if ('caches' in window) {
+                    caches.keys().then(function(names) {
+                        for (let name of names) {
+                            caches.delete(name);
+                        }
+                    });
+                }
+            }
+            
+            // 图片预加载
+            function preloadImages() {
+                allImages.forEach((imgData, index) => {
+                    const img = new Image();
+                    img.src = imgData.img;
+                    
+                    img.onload = () => {
+                        loadedImages++;
+                        // 添加到缓存数组
+                        cachedImages.push(img);
+                        
+                        // 全部加载完成
+                        if (loadedImages === imageCount) {
+                            setTimeout(() => {
+                                document.getElementById('loadingIndicator').style.opacity = "0";
+                                document.querySelector('.container').style.opacity = "1";
+                                
+                                setTimeout(() => {
+                                    document.getElementById('loadingIndicator').style.display = "none";
+                                    startApp();
+                                }, 500);
+                            }, 300);
+                        }
+                    };
+                    
+                    img.onerror = () => {
+                        console.error("图片加载失败:", imgData.img);
+                        loadedImages++;
+                    };
+                });
+            }
+            
+            // 启动应用程序
+            function startApp() {
+                // 渲染所有轮播器
+                renderSlider('productSliderList', 'productIndicators', productData);
+                renderSlider('qualitySliderList', 'qualityIndicators', qualityData);
+                renderSlider('s6SliderList', 's6Indicators', s6Data);
+                
+                // 当前显示的轮播组
+                let currentSlider = 'productSlider';
+                // 轮播组的顺序
+                const sliderGroups = ['productSlider', 'qualitySlider', 's6Slider'];
+                let currentGroupIndex = 0;
+                // 各轮播组内部索引
+                const groupIndices = {
+                    productSlider: 0,
+                    qualitySlider: 0,
+                    s6Slider: 0
+                };
+                
+                // 存储每个轮播组的计时器对象
+                const sliderTimers = {
+                    productSlider: null,
+                    qualitySlider: null,
+                    s6Slider: null
+                };
+                
+                // 切换时间设置（20秒）
+                const switchInterval = 30000;
+                let progressBar = document.getElementById('progressBar');
+                
+                // 启动指定轮播组的内部轮播
+                function startSliderTimer(sliderId) {
+                    const itemCount = document.querySelectorAll(`#${sliderId} .indicator`).length;
+                    let currentIndex = groupIndices[sliderId];
+                    
+                    // 清除之前的计时器（如果存在）
+                    if (sliderTimers[sliderId]) {
+                        clearInterval(sliderTimers[sliderId]);
+                    }
+                    
+                    // 每5秒切换一次图片
+                    sliderTimers[sliderId] = setInterval(() => {
+                        currentIndex = (currentIndex + 1) % itemCount;
+                        slideTo(currentIndex, sliderId);
+                        groupIndices[sliderId] = currentIndex;
+                    }, 5000);
+                }
+                
+                // 停止指定轮播组的内部轮播
+                function stopSliderTimer(sliderId) {
+                    if (sliderTimers[sliderId]) {
+                        clearInterval(sliderTimers[sliderId]);
+                        sliderTimers[sliderId] = null;
+                    }
+                }
+                
+                // 在轮播组内部切换函数
+                function slideTo(index, sliderId) {
+                    const sliderList = document.querySelector(`#${sliderId} .slider-list`);
+                    sliderList.style.transform = `translateY(-${index * 100}%)`;
+                    
+                    // 更新指示器
+                    document.querySelectorAll(`#${sliderId} .indicator`).forEach((ind, i) => {
+                        ind.classList.toggle('active', i === index);
+                    });
+                    
+                    // 更新当前索引
+                    groupIndices[sliderId] = index;
+                }
+                
+                // 轮播组切换函数
+                function switchSliderGroup(sliderId) {
+                    // 停止当前轮播组的计时器
+                    stopSliderTimer(currentSlider);
+                    
+                    // 隐藏所有轮播组
+                    document.querySelectorAll('.vertical-slider').forEach(slider => {
+                        slider.classList.remove('active');
+                    });
+                    
+                    // 显示目标轮播组
+                    const targetSlider = document.getElementById(sliderId);
+                    targetSlider.classList.add('active');
+                    currentSlider = sliderId;
+                    
+                    // 启动新轮播组的计时器
+                    startSliderTimer(sliderId);
+                    
+                    // 重置新轮播组的进度条
+                    progress = 0;
+                    progressBar.style.width = '0%';
+                }
+                
+                // 切换到下一个轮播组
+                function switchToNextGroup() {
+                    currentGroupIndex = (currentGroupIndex + 1) % sliderGroups.length;
+                    const nextSlider = sliderGroups[currentGroupIndex];
+                    switchSliderGroup(nextSlider);
+                }
+                
+                // 创建倒计时定时器（20秒切换轮播组）
+                let progress = 0;
+                let progressInterval = 100; // 更新频率ms
+                let progressStep = (progressInterval / switchInterval) * 100;
+                
+                function updateProgressBar() {
+                    progress += progressStep;
+                    progressBar.style.width = `${progress}%`;
+                    
+                    if (progress >= 100) {
+                        switchToNextGroup();
+                    }
+                }
+                
+                // 启动进度条计时器
+                let progressTimer = setInterval(updateProgressBar, progressInterval);
+                
+                // 渲染轮播内容函数
+                function renderSlider(listId, indicatorsId, images) {
+                    const sliderList = document.getElementById(listId);
+                    const indicators = document.getElementById(indicatorsId);
+                    const sliderId = sliderList.parentElement.id;
+                    
+                    // 清空容器
+                    sliderList.innerHTML = '';
+                    indicators.innerHTML = '';
+                    
+                    // 添加图片项
+                    images.forEach((data, index) => {
+                        // 创建轮播项
+                        const sliderItem = document.createElement('div');
+                        sliderItem.className = 'slider-item';
+                        sliderItem.innerHTML = `
+                            <img src="${data.img}" alt="轮播图片">
+                        `;
+                        sliderList.appendChild(sliderItem);
+                        
+                        // 创建指示器
+                        const indicator = document.createElement('div');
+                        indicator.className = index === 0 ? 'indicator active' : 'indicator';
+                        indicator.setAttribute('data-index', index);
+                        indicators.appendChild(indicator);
+                        
+                        // 点击事件
+                        indicator.addEventListener('click', function() {
+                            const index = parseInt(this.getAttribute('data-index'));
+                            slideTo(index, sliderId);
+                            groupIndices[sliderId] = index;
+                            
+                            // 重置计时器
+                            if (sliderTimers[sliderId]) {
+                                startSliderTimer(sliderId);
+                            }
+                        });
+                    });
+                }
+                
+                // 启动初始轮播组
+                startSliderTimer('productSlider');
+            }
+            
+            // 初始化过程：清除缓存并预加载图片
+            function initialize() {
+                clearImageCache();
+                preloadImages();
+            }
+            
+            // 开始初始化
+            initialize();
+        });
+    </script>
+</body>
+</html>

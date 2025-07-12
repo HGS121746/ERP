@@ -1,0 +1,120 @@
+<!-- templates/horizontal.html -->
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>设备信息 - 横屏模式</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Microsoft YaHei', sans-serif;
+            background: linear-gradient(135deg, #1a2a6c, #2c3e50);
+            color: #fff;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            overflow: hidden;
+        }
+        
+        .container {
+            text-align: center;
+            padding: 30px;
+            background: rgba(0, 0, 0, 0.6);
+            border-radius: 20px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+            max-width: 80%;
+        }
+        
+        h1 {
+            font-size: 3rem;
+            margin-bottom: 30px;
+            color: #4fc3f7;
+            text-shadow: 0 0 10px rgba(79, 195, 247, 0.5);
+        }
+        
+        .device-info {
+            font-size: 2.5rem;
+            margin: 25px 0;
+            padding: 20px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 15px;
+            transition: all 0.3s ease;
+        }
+        
+        .device-info:hover {
+            background: rgba(255, 255, 255, 0.2);
+            transform: scale(1.05);
+        }
+        
+        .status {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            margin-left: 15px;
+            vertical-align: middle;
+        }
+        
+        .status-normal {
+            background-color: #4CAF50;
+            box-shadow: 0 0 10px #4CAF50;
+        }
+        
+        .qr-code {
+            margin: 30px auto;
+            width: 200px;
+            height: 200px;
+            background: linear-gradient(45deg, #4fc3f7, #2196F3);
+            border-radius: 15px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 1.5rem;
+            font-weight: bold;
+        }
+        
+        .instructions {
+            margin-top: 30px;
+            font-size: 1.2rem;
+            color: #bbb;
+            max-width: 600px;
+            margin-left: auto;
+            margin-right: auto;
+            line-height: 1.6;
+        }
+        
+        .pulse {
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container pulse">
+        <h1>设备信息</h1>
+        <div class="device-info">
+            设备ID: {{ device_id }} 
+            <span class="status status-normal"></span>
+        </div>
+        <div class="qr-code">
+            扫描二维码
+        </div>
+        <div class="instructions">
+            此页面为设备信息展示页面，请使用移动设备扫描二维码绑定设备，
+            或切换到竖屏模式查看生产数据看板。
+        </div>
+    </div>
+</body>
+</html>
